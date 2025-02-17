@@ -1,5 +1,5 @@
-import { Component } from "react";
-import Searchbar from '../Searchbar/Searchbar';
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Searchbar } from '../Searchbar/Searchbar';
 import ImageGallery from '../ImageGallery/ImageGallery';
 import Button from '../Button/Button';
 import Loading from '../Loader/Loader';
@@ -10,21 +10,21 @@ import Swal from 'sweetalert2'
 
 axios.defaults.baseURL = "https://pixabay.com/api/";
 
-class App extends Component {
-  state= {
-    query: '',
-    images: [],
-    page: 1,
-    isLoading: false,
-    showModal: false,
-    largeImageURL: '',
-    alt: '',
-  }
+const App = () => {
+  const [query, setQuery] = useState('');
+  const [images, setImages] = useState([]);
+  const [page, setPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [largeImageURL, setLargeImageURL] = useState('');
+  const [alt, setAlt] = useState('');
 
-  async fetchImages() {
-    const { query, page } = this.state;
+  const prevQueryRef = useRef();
+  const prevPageRef = useRef();
+  
+  const fetchImages = useCallback(async () => {
     const API_KEY = '47297906-a9077d1cc59aa7be5c21f4292';
-    this.setState({ isLoading: true });
+    setIsLoading(true);
 
     try {
       const response = await axios.get(`?key=${API_KEY}&q=${query}&page=${page}&image_type=photo&orientation=horizontal&per_page=12`);
@@ -32,76 +32,65 @@ class App extends Component {
       if(response.data.totalHits === 0) {
         Swal.fire({
           title: 'Error!',
-          text: 'No images found!',
+          text: `No images found for '${query}'!`,
           icon: 'error',
           confirmButtonText: 'Try again'
         })
       }
       
-      this.setState(prevState => {
-        const newImages = response.data.hits.filter(
-          hit => !prevState.images.some(image => image.id === hit.id)
-        );
-        return {
-          images: [...prevState.images, ...newImages],
-          isLoading: false,
-        };
-      });
+      const newImages = response.data.hits.filter(
+        hit => !images.some(image => image.id === hit.id)
+      );
+
+      setImages(prevImages => [...prevImages, ...newImages]);
+      
     } catch (error) {
       console.error('Error fetching images:', error);  
-      
-      this.setState({ isLoading: false });
+    } finally {
+      setIsLoading(false);
     }
-  }
+  }, [query, page, images]);
 
-  componentDidMount() {
-    // Optionally, you can fetch default images here if needed
-  }
+  useEffect(() => {
+    if (query && (prevQueryRef.current !== query || prevPageRef.current !== page)) {
+      fetchImages();
+      prevQueryRef.current = query;
+      prevPageRef.current = page;
+    }
+  }, [query, page, fetchImages]);
 
-  handleSearchSubmit = query => {
-    this.setState({ query: query, images: [], page: 1 }, () => {
-      this.fetchImages();
-    });
+  const handleSearchSubmit = query => {
+    setQuery(query);
+    setPage(1);
+    setImages([]);
   };
 
-  handleImageClick = (largeImageURL, alt) => {
-    this.setState({ largeImageURL, alt, showModal: true });
+  const handleImageClick = (largeImageURL, alt) => {
+    setLargeImageURL(largeImageURL);
+    setAlt(alt);
+    setShowModal(true);
   };
 
-  handleLoadMoreClick = () => {
-    this.setState(prevState => ({page: prevState.page + 1}), () => {
-      this.fetchImages();
-    })
+  const handleLoadMoreClick = () => {
+    setPage(prevPage => prevPage + 1);
   }
 
-  closeModal = () => {
-    this.setState({showModal: false, largeImageURL: '', alt: ''});
+  const closeModal = () => {
+    setShowModal(false);
+    setLargeImageURL('');
+    setAlt('');
   }
 
-  render() {
-    const { images, isLoading, showModal, largeImageURL, alt } = this.state;
-    return (
-      <div
-      className={styles.app}
-        // style={{
-        //   height: '100vh',
-        //   display: 'flex',
-        //   flexDirection: 'column',
-        //   justifyContent: 'center',
-        //   alignItems: 'center',
-        //   fontSize: 40,
-        //   color: '#010101'
-        // }}
-      >
-        <Searchbar onSubmit={this.handleSearchSubmit}/>
-        {<ImageGallery images={images} onImageClick={this.handleImageClick}/> }
+  return (
+    <div className={styles.app}>
+      <Searchbar onSubmit={handleSearchSubmit}/>
+      {<ImageGallery images={images} onImageClick={handleImageClick}/> }
         
-        {isLoading && <Loading />}
-        {images.length > 0 && <Button onClick={this.handleLoadMoreClick}/>}
-        {showModal && <Modal largeImageURL={largeImageURL} alt={alt} onClose={this.closeModal} />}
-      </div>
-    );
-  }
+      {isLoading && <Loading />}
+      {images.length > 0 && <Button onClick={handleLoadMoreClick}/>}
+      {showModal && <Modal largeImageURL={largeImageURL} alt={alt} onClose={closeModal} />}
+    </div>
+  );
 };
 
 export default App;
